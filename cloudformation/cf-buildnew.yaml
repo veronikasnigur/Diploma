@@ -1,20 +1,16 @@
-AWSTemplateFormatVersion: 2010-09-09
+AWSTemplateFormatVersion: '2010-09-09'
 
 ## =================== DESCRIPTION =================== ##
 Description: >-
   AWS CloudFormation sample template
-  - Create Route 53 resources to route DNS traffic for your domain to your S3 bucket that hosts static website
+  - Create a new CodeBuild project that gets the source code from GitHub, run the build for Angular project and drops the build artifacts into S3 bucket that hosts the static website
+  - Create a new IAM role for CodeBuild a) to access S3 bucket and its object and b) to stream CloudWatch logs
+  - Create a new Source Credential to allow CodeBuild to connect to target Github repo
 
 ## ===================== METADATA ===================== ##
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
-      - Label:
-          default: DNS parameters
-        Parameters:
-          - paramRootDomain
-          - paramSubdomain
-          - paramHostedZoneId
       - Label:
           default: GitHub parameters
         Parameters:
@@ -33,16 +29,6 @@ Metadata:
 
 ## ==================== PARAMETERS ==================== ##
 Parameters:
-  paramRootDomain:
-    Description: Specify a root domain for your website (such as example.com)
-    Type: String
-  paramSubdomain:
-    Description: OPTIONAL. Specify a subdomain (such as 'www' or 'apex' for www.example.com or apex.example.com). You can leave it empty to skip.
-    Type: String
-    Default: www
-  paramHostedZoneId:
-    Description: Specify a public hosted zone ID for root domain
-    Type: String
   paramPersonalGitHubAccessToken:
     Description: Provide your personal GitHub access token for CodeBuild to access your GitHub repo
     Type: String
@@ -73,36 +59,12 @@ Parameters:
     AllowedPattern: "[\\x20-\\x7E]*"
     ConstraintDescription: Must contain only ASCII characters
 
-## ==================== MAPPINGS ==================== ##
-Mappings:
-  RegionMap: # based on https://docs.aws.amazon.com/general/latest/gr/s3.html#s3_website_region_endpoints
-    us-east-1:
-      S3HostedZoneId: Z3AQBSTGFYJSTF
-    us-west-1:
-      S3HostedZoneId: Z2F56UZL2M1ACD
-    us-west-2:
-      S3HostedZoneId: Z3BJ6K6RIION7M
-    eu-central-1:
-      S3HostedZoneId: Z21DNDUVLTQW6Q
-    eu-west-1:
-      S3HostedZoneId: Z1BKCTXD74EZPE
-    ap-southeast-1:
-      S3HostedZoneId: Z3O0J2DXBE1FTB
-    ap-southeast-2:
-      S3HostedZoneId: Z1WCIGYICN2BYD
-    ap-northeast-1:
-      S3HostedZoneId: Z2M4EHUR26P7ZW
-    sa-east-1:
-      S3HostedZoneId: Z31GFT0UA1I2HV
-
 ## ==================== CONDITIONS ==================== ##
-Conditions:
-  # HasSubdomainName is false if paramSubdomain value is empty string
-  HasSubdomainName: !Not [!Equals [!Ref paramSubdomain, '']] 
+# Conditions:
 
 ## ===================== RESOURCES ===================== ##
 Resources:
-   # Create a new role for CodeBuild
+  # Create a new role for CodeBuild
   myCodeBuildProjectRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -182,69 +144,4 @@ Resources:
       ServiceRole: !Ref myCodeBuildProjectRole # !Sub 'arn:aws:iam::${AWS::AccountId}:role/${myCodeBuildRole}'
       TimeoutInMinutes: 5
       Artifacts: # drop the build artifacts of S3 bucket that hosts static website
-        Type: S3
-        Name: '/' # store the artifact in the root of the output bucket
-        Location: !Ref paramS3BucketNameForRootDomain # !Sub arn:aws:s3:::${paramS3BucketNameForRootDomain}
-        EncryptionDisabled: True #disable the encryption of artifacts in a build to see html pages
-      LogsConfig:
-        CloudWatchLogs:
-          Status: ENABLED
-          GroupName: !Sub ${paramCodeBuildProjectName}-cloud-watch-logs
-      Tags:
-        - Key: mastering-cloudformation
-          Value: !Ref paramUniqueTagName
-  # Make sure to retain the Hosted Zone resource if it exists
-  myRoute53HostedZone:
-    Type: 'AWS::Route53::HostedZone'
-    DeletionPolicy: Retain
-    Properties:
-      HostedZoneConfig: 
-        Comment: !Sub My public hosted zone for ${paramRootDomain}
-      Name: !Ref paramRootDomain
-      HostedZoneTags: 
-        - Key: mastering-cloudformation
-          Value: !Ref paramUniqueTagName
-
-  # Create a Route 53 record set group to route internet traffic from root domain (such as example.com) to S3 bucket website URL for root domain (such as example.com.s3-website-us-east-1.amazonaws.com)
-  myRoute53RecordSetGroupForRootDomain:
-    Type: 'AWS::Route53::RecordSetGroup'
-    Properties:
-      HostedZoneId: !Ref paramHostedZoneId
-      RecordSets:
-        - Name: !Ref paramRootDomain # point to an S3 bucket with root domain in the same account (such as example.com)
-          Type: A # 'A' routes traffic to an IPv4 address and some AWS resources
-          AliasTarget:
-              DNSName: !Sub s3-website-${AWS::Region}.amazonaws.com
-              HostedZoneId: !FindInMap # note, that ite is different from paramHostedZoneId - this hosted zone is for region that you created the bucket in!
-                - RegionMap
-                - !Ref 'AWS::Region'
-                - S3HostedZoneId
-  
-  # OPTIONAL. Create a Route 53 record set group to redirect traffic from subdomain (such as www.example.com) to S3 bucket website URL for subdomain (such as www.example.com.s3-website-us-east-1.amazonaws.com)
-  myRoute53RecordSetGroupForSubdomain:
-    Condition: HasSubdomainName # skip this resource if paramSubdomain value is empty string
-    Type: 'AWS::Route53::RecordSetGroup'
-    Properties:
-      HostedZoneId: !Ref paramHostedZoneId
-      RecordSets:
-        - Name: !Sub ${paramSubdomain}.${paramRootDomain} # point to an S3 bucket with subdomain in the same account (such as www.example.com)
-          Type: A # 'A' routes traffic to an IPv4 address and деякі ресурси AWS
-          AliasTarget:
-              DNSName: !Sub s3-website-${AWS::Region}.amazonaws.com 
-              HostedZoneId: !FindInMap # note, that it is different from paramHostedZoneId - this hosted zone is for region that you created the bucket in!
-                - RegionMap
-                - !Ref 'AWS::Region'
-                - S3HostedZoneId                
-
-## ======================= OUTPUT ====================== ##
-Outputs: 
-  outputCodeBuildProject:
-    Description: CodeBuild project name
-    Value: !Ref myCodeBuildProject
-  outputWebsiteURLForRootDomain:
-    Description: Website URL for root domain
-    Value: !Sub 'http://${paramRootDomain}/'
-  outputWebsiteURLForSubdomain:
-    Condition: HasSubdomainName 
-    Description: Website URL for subdomain
-    Value: !Sub 'http://${paramSubdomain}.${paramRootDomain}/'
+        Type: S
