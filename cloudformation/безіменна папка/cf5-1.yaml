@@ -1,0 +1,434 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+## =================== DESCRIPTION =================== ##
+Description: >-
+  AWS CloudFormation sample template
+  - Create Route 53 resources to route DNS traffic for your domain to your S3 bucket that hosts static website
+  - Create an Origin Access Identity (OAI) which is a special CloudFront user that you can associate with Amazon S3 origins, so that you can secure S3 content 
+  - Create CloudFront distribution for subdomain. Point it to S3 bucket for subdomain (that contains static website, such as www.example.com) from which CloudFront gets the files to distribute
+  - Create a policy for S3 bucket for subdomain (that contains static website, such as www.example.com) to let CloudFront OAI access S3 bucket content
+  - Create CloudFront distribution for root domain. Point it to S3 bucket for root domain (that redirects requests to S3 bucket for subdomain, such as from example.com to www.example.com)
+
+## ===================== METADATA ===================== ##
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Viewer Certificate parameters
+        Parameters:
+          - paramACMCertificateArn
+      - Label:
+          default: DNS parameters
+        Parameters:
+          - paramRootDomain
+          - paramSubdomain
+          - paramHostedZoneId
+      - Label:
+          default: GitHub parameters
+        Parameters:
+          - paramPersonalGitHubAccessToken
+          - paramGitHubRepositoryUrl
+          - paramBuildSpecRelativePathInGitHub
+      - Label:
+          default: CodeBuild parameters
+        Parameters:
+          - paramCodeBuildProjectName
+          - paramS3BucketNameForRootDomain
+      - Label:
+          default: AWS tag parameters
+        Parameters:
+          - paramUniqueTagName
+
+## ==================== PARAMETERS ==================== ##
+Parameters:
+  paramACMCertificateArn:
+    Description: Public SSL/TLS certificate ARN published by AWS Certificate Manager (ACM)
+    Type: String
+  paramRootDomain:
+    Description: Specify a root domain for your website (such as example.com)
+    Type: String
+  paramSubdomain:
+    Description: OPTIONAL. Specify a subdomain (such as 'www' or 'apex' for www.example.com or apex.example.com). You can leave it empty to skip.
+    Type: String
+    Default: www
+  paramHostedZoneId:
+    Description: Specify a public hosted zone ID for root domain
+    Type: String
+  paramPersonalGitHubAccessToken:
+    Description: Provide your personal GitHub access token for CodeBuild to access your GitHub repo
+    Type: String
+    MinLength: 10
+    ConstraintDescription: Personal GitHub access token is missing
+  paramGitHubRepositoryUrl:
+    Description: Provide your GitHub repository URL with source code for static website, e.g. https://github.com/my-account/my-repo-name.git
+    Type: String
+  paramBuildSpecRelativePathInGitHub:
+    Description: Provide a relative path for BuildSpec yaml file in source code for static website 
+    Type: String
+    Default: frontend/app-for-aws/buildspec.yml
+  paramCodeBuildProjectName:
+    Description: Specify CodeBuild project name
+    Type: String
+    MinLength: 10
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    ConstraintDescription: Should contain uppercase, lowercase letters and digits from 0 to 9 only
+    Default: westworld-codebuild-for-website-hosting
+  paramS3BucketNameForRootDomain:
+    Description: Specify an existing S3 bucket name that hosts static website, e.g. 'example.com'
+    Type: String
+  paramUniqueTagName:
+    Description: Specify a unique name for tag
+    Type: String
+    Default: static-website-hosting-to-s3
+    AllowedPattern: "[\\x20-\\x7E]*"
+    ConstraintDescription: Must contain only ASCII characters
+
+## ==================== MAPPINGS ==================== ##
+Mappings:
+  RegionMap: # based on https://docs.aws.amazon.com/general/latest/gr/s3.html#s3_website_region_endpoints
+    us-east-1:
+      S3HostedZoneId: Z3AQBSTGFYJSTF
+    us-west-1:
+      S3HostedZoneId: Z2F56UZL2M1ACD
+    us-west-2:
+      S3HostedZoneId: Z3BJ6K6RIION7M
+    eu-central-1:
+      S3HostedZoneId: Z21DNDUVLTQW6Q
+    eu-west-1:
+      S3HostedZoneId: Z1BKCTXD74EZPE
+    ap-southeast-1:
+      S3HostedZoneId: Z3O0J2DXBE1FTB
+    ap-southeast-2:
+      S3HostedZoneId: Z1WCIGYICN2BYD
+    ap-northeast-1:
+      S3HostedZoneId: Z2M4EHUR26P7ZW
+    sa-east-1:
+      S3HostedZoneId: Z31GFT0UA1I2HV
+
+## ==================== CONDITIONS ==================== ##
+Conditions:
+  # HasSubdomainName is false if paramSubdomain value is empty string
+  HasSubdomainName: !Not [!Equals [!Ref paramSubdomain, '']] 
+
+## ===================== RESOURCES ===================== ##
+Resources:
+   # create an Origin Access Identity (OAI) which is a special CloudFront user that you can associate with Amazon S3 origins, so that you can secure S3 content
+  myCloudFrontOAI:
+    Type: 'AWS::CloudFront::CloudFrontOriginAccessIdentity'
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        # a comment to describe the origin access identity
+        Comment: 'OAI for S3 origins'
+   # create CloudFront distribution for subdomain. Point it to S3 bucket for subdomain (that contains static website, such as www.example.com) from which CloudFront gets the files to distribute
+  myCloudFrontDistributionForSubdomain:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Comment: CloudFront distribution points to S3 bucket for subdomain
+        Origins: # info about origins for this distribution
+          - DomainName: !Sub '${paramSubdomain}.${paramRootDomain}.s3.${AWS::Region}.amazonaws.com' # Regional domain name of S3 bucket for subdomain (outputS3RegionalDomainNameForSubomain)
+            Id: !Sub 'S3Origin-${paramSubdomain}.${paramRootDomain}' # unique identifier of an origin access control for this origin
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${myCloudFrontOAI}'
+        Aliases: # info about CNAMEs (alternate domain names), if any, for this distribution
+          - !Sub '${paramSubdomain}.${paramRootDomain}'
+        # let CloudFront replace HTTP status codes in the 4xx and 5xx range with custom error messages before returning the response to the viewer
+        CustomErrorResponses:
+          - ErrorCode: 403 # 403 from S3 indicates that the file does not exists
+            ResponseCode: 404 # HTTP status code that you want CloudFront to return to the viewer along with the custom error pag
+            ResponsePagePath: '/error.html' # path to the custom error page that you want CloudFront to return to a viewer when your origin returns the HTTP status code specified by ErrorCode, for example, /4xx-errors/403-forbidden.html
+            ErrorCachingMinTTL: 60 # minimum amount of time, in seconds, that you want CloudFront to cache the HTTP status code specified in ErrorCode
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          Compress: true
+          DefaultTTL: 3600 # in seconds, 1 hour
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          MaxTTL: 86400 # in seconds, 24 hours
+          MinTTL: 60 # in seconds, 1 min
+          TargetOriginId: !Sub 'S3Origin-${paramSubdomain}.${paramRootDomain}'
+          ViewerProtocolPolicy: 'redirect-to-https' # 'allow-all'
+        DefaultRootObject: 'index.html' 
+        Enabled: true # enable distribution
+        HttpVersion: http2 # the maximum HTTP version(s) that you want viewers to use to communicate with CloudFront
+        PriceClass: PriceClass_All # allowed values: PriceClass_100 | PriceClass_200 | PriceClass_All
+        ViewerCertificate:
+          AcmCertificateArn: !Ref paramACMCertificateArn
+          SslSupportMethod: sni-only
+      Tags:
+        - Key: mastering-cloudformation
+          Value: !Ref paramUniqueTagName
+    # create a policy for S3 bucket for subdomain (that contains static website, such as www.example.com) to let CloudFront OAI access S3 bucket content
+  myPolicyForS3BucketForSubdomain:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Sub '${paramSubdomain}.${paramRootDomain}'
+      PolicyDocument:
+        Statement:
+        - Action: 's3:GetObject'
+          Effect: Allow
+          Resource: !Sub 'arn:aws:s3:::${paramSubdomain}.${paramRootDomain}/*'
+          Principal:
+            CanonicalUser: !GetAtt myCloudFrontOAI.S3CanonicalUserId
+        # deny access for non SSL access to S3 bucket
+        - Sid: AllowSSLRequestsOnly 
+          Effect: Deny
+          Principal: '*'
+          Action: 's3:*'
+          Resource:
+          - !Sub 'arn:aws:s3:::${paramSubdomain}.${paramRootDomain}'
+          - !Sub 'arn:aws:s3:::${paramSubdomain}.${paramRootDomain}/*'
+          Condition:
+            Bool:
+              'aws:SecureTransport': false
+
+  # create CloudFront distribution for root domain. Point it to S3 bucket for root domain (that redirects requests to S3 bucket for subdomain, such as from example.com to www.example.com)
+  myCloudFrontDistributionForRootDomain:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Comment: CloudFront distribution points to S3 bucket for root domain
+        Origins: # info about origins for this distribution
+          # Important! Known issue with Cloudfront to s3 redirect giving Access denied error
+          # see https://stackoverflow.com/questions/22740084/amazon-s3-redirect-and-cloudfront 
+          # - DomainName: !Sub '${paramRootDomain}.s3.${AWS::Region}.amazonaws.com' # Regional domain name of S3 bucket for root domain (outputS3RegionalDomainNameForRootDomain)
+          - DomainName: !Sub '${paramRootDomain}.s3-website-${AWS::Region}.amazonaws.com' # use Amazon S3 website endpoint for root domain (outputS3WebsiteURLForRootDomain)
+            Id: !Sub 'RedirectS3Origin-${paramRootDomain}' # unique identifier of an origin access control for this origin
+            # Important, for Amazon S3 website endpoint as DomainName need to be configured as CustomOriginConfig and NOT as S3OriginConfig
+            # It resolves the following issue: "Resource handler returned message: "Invalid request provided: The parameter Origin DomainName does not refer to a valid S3 bucket.""
+            # see https://stackoverflow.com/questions/40095803/how-do-you-create-an-aws-cloudfront-distribution-that-points-to-an-s3-static-ho 
+            # see https://github.com/hashicorp/terraform-provider-aws/issues/7847 
+            CustomOriginConfig:
+              HTTPPort: 80 # required
+              HTTPSPort: 443 # required
+              OriginProtocolPolicy: 'http-only' 
+        Aliases: # info about CNAMEs (alternate domain names), if any, for this distribution
+          - !Sub '${paramRootDomain}'
+        # let CloudFront replace HTTP status codes in the 4xx and 5xx range with custom error messages before returning the response to the viewer
+        CustomErrorResponses:
+          - ErrorCode: 403 # 403 from S3 indicates that the file does not exists
+            ResponseCode: 404 # HTTP status code that you want CloudFront to return to the viewer along with the custom error pag
+            ResponsePagePath: '/error.html' # path to the custom error page that you want CloudFront to return to a viewer when your origin returns the HTTP status code specified by ErrorCode, for example, /4xx-errors/403-forbidden.html
+            ErrorCachingMinTTL: 60 # minimum amount of time, in seconds, that you want CloudFront to cache the HTTP status code specified in ErrorCode
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          Compress: true
+          DefaultTTL: 3600 # in seconds, 1 hour
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          MaxTTL: 86400 # in seconds, 24 hours
+          MinTTL: 60 # in seconds, 1 min
+          TargetOriginId: !Sub 'RedirectS3Origin-${paramRootDomain}'
+          ViewerProtocolPolicy: 'redirect-to-https' # 'allow-all'
+        DefaultRootObject: 'index.html' 
+        Enabled: true # enable distribution
+        HttpVersion: http2 # the maximum HTTP version(s) that you want viewers to use to communicate with CloudFront
+        PriceClass: PriceClass_All # allowed values: PriceClass_100 | PriceClass_200 | PriceClass_All
+        ViewerCertificate:
+          AcmCertificateArn: !Ref paramACMCertificateArn
+          SslSupportMethod: sni-only
+      Tags:
+        - Key: mastering-cloudformation
+          Value: !Ref paramUniqueTagName
+        
+  # request public SSL/TLS certificate from AWS Certificate Manager (ACM) for our domain name and all its subdomains 
+  # it helps to secure network communications and establish the identity of websites over the Internet 
+  mySSLCertificate:
+    Type: 'AWS::CertificateManager::Certificate'
+    Properties:
+      DomainName: !Ref paramRootDomain # root domain (such as example.com)
+      SubjectAlternativeNames:
+        - !Sub '*.${paramRootDomain}' # request a wildcard certificate for all subdomains
+      DomainValidationOptions:
+        - DomainName: !Ref paramRootDomain # DNS record for the root domain
+          HostedZoneId: !Ref paramHostedZoneId
+        # Note: If a certificate with automatic (Route53) DNS validation contains both a base domain name and the wildcard for that domain (e.g., example.com and *.example.com), the corresponding DNS validation records are identical.
+        # This seems to have caused problems for the automated CloudFormation DNS validation. Solving the problem by removing the redundant wildcard entries from the DomainValidationOption.  
+        # Source: https://github.com/aws/aws-cdk/pull/9291 
+        # - DomainName: !Sub '*.${paramRootDomain}' # DNS record for the all subdomains
+        #   HostedZoneId: !Ref paramHostedZoneId
+        #   ValidationDomain: !Ref paramRootDomain  
+      ValidationMethod: DNS
+      Tags:
+        - Key: mastering-cloudformation
+          Value: !Ref paramUniqueTagName
+   # Create a new role for CodeBuild
+  myCodeBuildProjectRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub role-for-${paramCodeBuildProjectName}
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+      Policies:
+        - PolicyName: !Sub policy-for-${paramCodeBuildProjectName}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # statement to create and stream CloudWatch logs
+              - Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Effect: Allow
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${paramCodeBuildProjectName}-cloud-watch-logs # should match CloudWatchLogs's GroupName under myCodeBuildProject resource
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${paramCodeBuildProjectName}-cloud-watch-logs:* # should match CloudWatchLogs's GroupName under myCodeBuildProject resource
+              # statement to access S3 bucket that hosts static website and its object (CodeBuild will save Artifacts there)
+              - Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Effect: Allow
+                Resource:
+                  - !Sub arn:aws:s3:::${paramS3BucketNameForRootDomain}
+                  - !Sub arn:aws:s3:::${paramS3BucketNameForRootDomain}/*
+      Tags:
+        - Key: mastering-cloudformation
+          Value: !Ref paramUniqueTagName
+  
+  # Allow CodeBuild to connect to target Github repo (where static website locates) using Github Personal Access Token 
+  myCodeBuildSourceCredential:
+    Type: 'AWS::CodeBuild::SourceCredential'
+    Properties:
+      AuthType: PERSONAL_ACCESS_TOKEN
+      ServerType: GITHUB
+      Token: !Ref paramPersonalGitHubAccessToken
+
+  # Create a new CodeBuild project that gets the source code from GitHub and drops the build artifacts into S3 bucket
+  myCodeBuildProject:
+    Type: 'AWS::CodeBuild::Project'
+    Properties:
+      Name: !Ref paramCodeBuildProjectName
+      Description: CodeBuild project for automatically build of static website hosted on s3
+      Source:
+        Type: GITHUB
+        Location: !Ref paramGitHubRepositoryUrl
+        GitCloneDepth: 1
+        BuildSpec: !Ref paramBuildSpecRelativePathInGitHub
+        Auth:
+          Resource: !Ref myCodeBuildSourceCredential
+          Type: OAUTH
+      Triggers:
+        Webhook: true
+        FilterGroups:
+          - - Type: EVENT
+              Pattern: PUSH
+            - Type: HEAD_REF
+              Pattern: ^refs/heads/main # for feature branches use: ^refs/heads/feature/.* 
+      Environment: # use Ubuntu standard v7
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+      ServiceRole: !Ref myCodeBuildProjectRole # !Sub 'arn:aws:iam::${AWS::AccountId}:role/${myCodeBuildRole}'
+      TimeoutInMinutes: 5
+      Artifacts: # drop the build artifacts of S3 bucket that hosts static website
+        Type: S3
+        Name: '/' # store the artifact in the root of the output bucket
+        Location: !Ref paramS3BucketNameForRootDomain # !Sub arn:aws:s3:::${paramS3BucketNameForRootDomain}
+        EncryptionDisabled: True #disable the encryption of artifacts in a build to see html pages
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub ${paramCodeBuildProjectName}-cloud-watch-logs
+      Tags:
+        - Key: mastering-cloudformation
+          Value: !Ref paramUniqueTagName
+  # Make sure to retain the Hosted Zone resource if it exists
+  myRoute53HostedZone:
+    Type: 'AWS::Route53::HostedZone'
+    DeletionPolicy: Retain
+    Properties:
+      HostedZoneConfig: 
+        Comment: !Sub My public hosted zone for ${paramRootDomain}
+      Name: !Ref paramRootDomain
+      HostedZoneTags: 
+        - Key: mastering-cloudformation
+          Value: !Ref paramUniqueTagName
+
+  # Create a Route 53 record set group to route internet traffic from root domain (such as example.com) to S3 bucket website URL for root domain (such as example.com.s3-website-us-east-1.amazonaws.com)
+  myRoute53RecordSetGroupForRootDomain:
+    Type: 'AWS::Route53::RecordSetGroup'
+    Properties:
+      HostedZoneId: !Ref paramHostedZoneId
+      RecordSets:
+        - Name: !Ref paramRootDomain # point to an S3 bucket with root domain in the same account (such as example.com)
+          Type: A # 'A' routes traffic to an IPv4 address and some AWS resources
+          AliasTarget:
+              DNSName: !Sub s3-website-${AWS::Region}.amazonaws.com
+              HostedZoneId: !FindInMap # note, that ite is different from paramHostedZoneId - this hosted zone is for region that you created the bucket in!
+                - RegionMap
+                - !Ref 'AWS::Region'
+                - S3HostedZoneId
+  
+  # OPTIONAL. Create a Route 53 record set group to redirect traffic from subdomain (such as www.example.com) to S3 bucket website URL for subdomain (such as www.example.com.s3-website-us-east-1.amazonaws.com)
+  myRoute53RecordSetGroupForSubdomain:
+    Condition: HasSubdomainName # skip this resource if paramSubdomain value is empty string
+    Type: 'AWS::Route53::RecordSetGroup'
+    Properties:
+      HostedZoneId: !Ref paramHostedZoneId
+      RecordSets:
+        - Name: !Sub ${paramSubdomain}.${paramRootDomain} # point to an S3 bucket with subdomain in the same account (such as www.example.com)
+          Type: A # 'A' routes traffic to an IPv4 address and деякі ресурси AWS
+          AliasTarget:
+              DNSName: !Sub s3-website-${AWS::Region}.amazonaws.com 
+              HostedZoneId: !FindInMap # note, that it is different from paramHostedZoneId - this hosted zone is for region that you created the bucket in!
+                - RegionMap
+                - !Ref 'AWS::Region'
+                - S3HostedZoneId                
+
+## ======================= OUTPUT ====================== ##
+Outputs: 
+  outputCloudFrontDistributionForSubdomainId:
+    Description: CloudFront distribution ID for subdomain
+    Value: !Ref myCloudFrontDistributionForSubdomain
+  outputCloudFrontDistributionDomainNameForSubdomain:
+    Description: CloudFront distribution domain name for subdomain
+    Value: !GetAtt myCloudFrontDistributionForSubdomain.DomainName
+  outputCloudFrontDistributionForRootDomainId:
+    Description: CloudFront distribution ID for root domain
+    Value: !Ref myCloudFrontDistributionForRootDomain
+  outputCloudFrontDistributionDomainNameForRootDomain:
+    Description: CloudFront distribution domain name for root domain
+    Value: !GetAtt myCloudFrontDistributionForRootDomain.DomainName  
+  outputCertificateArn:
+    Description: Issued SSL certificate Arn
+    Value: !Ref mySSLCertificate
+  outputCodeBuildProject:
+    Description: CodeBuild project name
+    Value: !Ref myCodeBuildProject
+  outputWebsiteURLForRootDomain:
+    Description: Website URL for root domain
+    Value: !Sub 'http://${paramRootDomain}/'
+  outputWebsiteURLForSubdomain:
+    Condition: HasSubdomainName 
+    Description: Website URL for subdomain
+    Value: !Sub 'http://${paramSubdomain}.${paramRootDomain}/'
