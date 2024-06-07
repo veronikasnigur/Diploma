@@ -103,7 +103,7 @@ Mappings:
       S3HostedZoneId: Z2M4EHUR26P7ZW
     sa-east-1:
       S3HostedZoneId: Z31GFT0UA1I2HV
-      
+
 ## ==================== CONDITIONS ==================== ##
 Conditions:
   HasSubdomainName: !Not [!Equals [!Ref paramSubdomain, '']]
