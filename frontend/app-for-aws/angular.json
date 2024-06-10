@@ -29,6 +29,10 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "left-sidebar.html",
+                "input": "src"
               }
             ],
             "styles": [
@@ -91,7 +95,7 @@
               },
               {
                 "glob": "left-sidebar.html",
-                "input": "src/left-sidebar.html"
+                "input": "src"
               }
             ],
             "styles": [
