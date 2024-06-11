@@ -31,13 +31,18 @@
                 "output": "/assets"
               },
               {
+                "glob": "**/*",
+                "input": "src/imgs",
+                "output": "/imgs"
+              },
+              {
                 "glob": "favicon.ico",
                 "input": "src",
                 "output": "/"
               }
             ],
             "styles": [
-              "src/styles.css"
+              "src/assets/css/main.css"
             ],
             "scripts": []
           },
@@ -95,7 +100,7 @@
               }
             ],
             "styles": [
-              "src/styles.css"
+              "src/assets/css/main.css"
             ],
             "scripts": []
           }
