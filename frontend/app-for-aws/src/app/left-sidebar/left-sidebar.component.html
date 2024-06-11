@@ -1,1 +1,210 @@
-<p>left-sidebar works!</p>
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>CarClub Forum</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="assets/css/main.css" />
+    <style>
+        /* Custom CSS to align the forum categories to the left */
+        ul.style2 {
+            text-align: left;
+        }
+        .topics-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .topics-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        .topics-list li a {
+            text-decoration: none;
+            color: #333;
+            font-size: 1.5em; /* Increase font size for topics */
+        }
+        .sub-category {
+            display: none;
+            padding-left: 20px;
+        }
+        .category-item.active .sub-category {
+            display: block;
+        }
+        .category-item > a {
+            font-size: 1.5em; /* Increase font size for categories */
+            display: block;
+            padding: 10px 0;
+            color: #000;
+        }
+    </style>
+</head>
+<body class="left-sidebar is-preload">
+    <div id="page-wrapper">
+
+        <!-- Header Wrapper -->
+        <div id="header-wrapper">
+            <div class="container">
+
+                <!-- Header -->
+                <header id="header">
+                    <div class="inner">
+
+                        <!-- Logo -->
+                        <h1><a href="index.html" id="logo">CarClub</a></h1>
+
+                        <!-- Nav -->
+                        <nav id="nav">
+                            <ul>
+                                <li><a href="index.html">Новини</a></li>
+                                <li class="current_page_item"><a href="forum.html">Форум</a></li>
+                            </ul>
+                        </nav>
+
+                    </div>
+                </header>
+
+            </div>
+        </div>
+
+        <!-- Main Wrapper -->
+        <div id="main-wrapper">
+            <div class="wrapper style2">
+                <div class="inner">
+                    <div class="container">
+                        <div class="row">
+                            <div class="col-4 col-12-medium">
+                                <div id="sidebar">
+                                    <!-- Sidebar -->
+                                    <section>
+                                        <header class="major">
+                                            <h2>Категорії форуму</h2>
+                                        </header>
+                                        <ul class="style2">
+                                            <li class="category-item">
+                                                <a href="#" onclick="toggleCategory(event)">Загальні обговорення</a>
+                                                <ul class="sub-category">
+                                                    <li><a href="#">Тема 1</a></li>
+                                                    <li><a href="#">Тема 2</a></li>
+                                                    <li><a href="#">Тема 3</a></li>
+                                                </ul>
+                                            </li>
+                                            <li class="category-item">
+                                                <a href="#" onclick="toggleCategory(event)">Ремонт та обслуговування</a>
+                                                <ul class="sub-category">
+                                                    <li><a href="#">Тема 1</a></li>
+                                                    <li><a href="#">Тема 2</a></li>
+                                                    <li><a href="#">Тема 3</a></li>
+                                                </ul>
+                                            </li>
+                                            <li class="category-item">
+                                                <a href="#" onclick="toggleCategory(event)">Тюнінг та модифікації</a>
+                                                <ul class="sub-category">
+                                                    <li><a href="#">Тема 1</a></li>
+                                                    <li><a href="#">Тема 2</a></li>
+                                                    <li><a href="#">Тема 3</a></li>
+                                                </ul>
+                                            </li>
+                                            <li class="category-item">
+                                                <a href="#" onclick="toggleCategory(event)">Купівля та продаж</a>
+                                                <ul class="sub-category">
+                                                    <li><a href="#">Тема 1</a></li>
+                                                    <li><a href="#">Тема 2</a></li>
+                                                    <li><a href="#">Тема 3</a></li>
+                                                </ul>
+                                            </li>
+                                        </ul>
+                                    </section>
+                                </div>
+                            </div>
+                            <div class="col-8 col-12-medium imp-medium">
+                                <div id="content">
+                                    <!-- Content -->
+                                    <article>
+                                        <header class="major">
+                                            <h2>Форум</h2>
+                                            <p>Обговорюйте все, що стосується автомобілів</p>
+                                        </header>
+
+                                        <!-- New Topic Form -->
+                                        <section>
+                                            <header class="major">
+                                                <h3>Створити нову тему</h3>
+                                            </header>
+                                            <form method="post" action="create_topic.php">
+                                                <div class="row gtr-uniform">
+                                                    <div class="col-12">
+                                                        <input type="text" name="title" id="title" placeholder="Назва теми" required />
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <textarea name="content" id="content" placeholder="Зміст теми" rows="6" required></textarea>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <ul class="actions">
+                                                            <li><input type="submit" value="Створити тему" class="primary" /></li>
+                                                            <li><input type="reset" value="Очистити" /></li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        </section>
+
+                                        <!-- Topics List -->
+                                        <section>
+                                            <header class="major">
+                                                <h3>Останні теми</h3>
+                                            </header>
+                                            <ul class="topics-list">
+                                                <li><a href="#">Нова модель автомобіля 2024 року</a></li>
+                                                <li><a href="#">Поради щодо зимового обслуговування</a></li>
+                                                <li><a href="#">Як вибрати найкращу шину для літа?</a></li>
+                                            </ul>
+                                        </section>
+                                    </article>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Wrapper -->
+        <div id="footer-wrapper">
+            <footer id="footer" class="container">
+                <div class="row">
+                   
+
+                        
+                        <!-- Copyright -->
+                        <div class="col-12">
+								<div id="copyright">
+									<ul class="menu">
+										<li>&copy; Copyright © 2024 vs13.site - All Rights Reserved.</li><li></li>
+									</ul>
+								</div>
+							</div>
+
+                    </div>
+                </div>
+            </footer>
+        </div>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.dropotron.min.js"></script>
+    <script src="assets/js/browser.min.js"></script>
+    <script src="assets/js/breakpoints.min.js"></script>
+    <script src="assets/js/util.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script>
+        function toggleCategory(event) {
+            event.preventDefault();
+            const categoryItem = event.target.closest('.category-item');
+            categoryItem.classList.toggle('active');
+        }
+    </script>
+
+</body>
+</html>
