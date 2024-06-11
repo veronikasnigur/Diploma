@@ -36,6 +36,11 @@
                 "output": "/imgs"
               },
               {
+                "glob": "left-sidebar.html",
+                "input": "src",
+                "output": "/"
+              },
+              {
                 "glob": "favicon.ico",
                 "input": "src",
                 "output": "/"
