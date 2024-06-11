@@ -28,12 +28,12 @@
               {
                 "glob": "**/*",
                 "input": "src/assets",
-                "output": "/assets"
+                "output": "/"
               },
               {
                 "glob": "**/*",
                 "input": "src/imgs",
-                "output": "/imgs"
+                "output": "/"
               },
               {
                 "glob": "left-sidebar.html",

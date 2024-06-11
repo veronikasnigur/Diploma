@@ -337,28 +337,28 @@ Resources:
           Value: !Ref paramUniqueTagName
 
   # create a policy for S3 bucket for subdomain (that contains static website, such as www.example.com) to let CloudFront OAI access S3 bucket content
-  myPolicyForS3BucketForSubdomain:
-    Type: 'AWS::S3::BucketPolicy'
-    Properties:
-      Bucket: !Sub '${paramSubdomain}.${paramRootDomain}'
-      PolicyDocument:
-        Statement:
-        - Action: 's3:GetObject'
-          Effect: Allow
-          Resource: !Sub 'arn:aws:s3:::${paramSubdomain}.${paramRootDomain}/*'
-          Principal:
-            CanonicalUser: !GetAtt myCloudFrontOAI.S3CanonicalUserId
-        # deny access for non SSL access to S3 bucket
-        - Sid: AllowSSLRequestsOnly 
-          Effect: Deny
-          Principal: '*'
-          Action: 's3:*'
-          Resource:
-          - !Sub 'arn:aws:s3:::${paramSubdomain}.${paramRootDomain}'
-          - !Sub 'arn:aws:s3:::${paramSubdomain}.${paramRootDomain}/*'
-          Condition:
-            Bool:
-              'aws:SecureTransport': false
+  # myPolicyForS3BucketForSubdomain:
+  #   Type: 'AWS::S3::BucketPolicy'
+  #   Properties:
+  #     Bucket: !Sub '${paramSubdomain}.${paramRootDomain}'
+  #     PolicyDocument:
+  #       Statement:
+  #       - Action: 's3:GetObject'
+  #         Effect: Allow
+  #         Resource: !Sub 'arn:aws:s3:::${paramSubdomain}.${paramRootDomain}/*'
+  #         Principal:
+  #           CanonicalUser: !GetAtt myCloudFrontOAI.S3CanonicalUserId
+  #       # deny access for non SSL access to S3 bucket
+  #       - Sid: AllowSSLRequestsOnly 
+  #         Effect: Deny
+  #         Principal: '*'
+  #         Action: 's3:*'
+  #         Resource:
+  #         - !Sub 'arn:aws:s3:::${paramSubdomain}.${paramRootDomain}'
+  #         - !Sub 'arn:aws:s3:::${paramSubdomain}.${paramRootDomain}/*'
+  #         Condition:
+  #           Bool:
+  #             'aws:SecureTransport': false
 
   # create CloudFront distribution for root domain. Point it to S3 bucket for root domain (that redirects requests to S3 bucket for subdomain, such as from example.com to www.example.com)
   myCloudFrontDistributionForRootDomain:
